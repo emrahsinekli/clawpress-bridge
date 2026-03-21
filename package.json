@@ -1,0 +1,19 @@
+{
+  "name": "clawpress-bridge",
+  "version": "1.0.0",
+  "description": "ClawPress Bridge — connects your WordPress ClawPress plugin to your local OpenClaw gateway",
+  "main": "index.js",
+  "bin": {
+    "clawpress-bridge": "./bin/cli.js"
+  },
+  "keywords": ["clawpress", "openclaw", "wordpress", "ai", "bridge"],
+  "author": "ClawPress",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawpress/clawpress-bridge"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
