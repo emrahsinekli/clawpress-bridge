@@ -120,17 +120,12 @@ if npm list -g clawpress-bridge &>/dev/null 2>&1; then
     log "clawpress-bridge already installed via npm"
 else
     # Download directly from GitHub
-    BRIDGE_URL="https://raw.githubusercontent.com/clawpress/clawpress-bridge/main/index.js"
+    BRIDGE_URL="https://raw.githubusercontent.com/emrahsinekli/clawpress-bridge/master/index.js"
     if curl -fsSL "$BRIDGE_URL" -o "$BRIDGE_DIR/index.js" 2>/dev/null; then
         BRIDGE_PATH="$BRIDGE_DIR/index.js"
         log "Bridge downloaded from GitHub"
     else
-        # Fallback: create inline
-        warn "Could not download from GitHub, creating bridge inline..."
-        # Bridge code is embedded at the bottom of this script.
-        sed -n '/^##BRIDGE_START##$/,/^##BRIDGE_END##$/p' "$0" | sed '1d;$d' > "$BRIDGE_DIR/index.js"
-        BRIDGE_PATH="$BRIDGE_DIR/index.js"
-        log "Bridge created locally"
+        err "Could not download bridge from GitHub. Check your internet connection."
     fi
 fi
 
