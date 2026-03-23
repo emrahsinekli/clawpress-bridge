@@ -25,6 +25,7 @@ const GW_PORT = parseInt(process.env.GATEWAY_PORT || '18789', 10);
 const HOME = process.env.HOME || '/root';
 const CRON_FILE = path.join(HOME, '.openclaw', 'cron', 'jobs.json');
 const CONFIG_FILE = path.join(HOME, '.openclaw', 'openclaw.json');
+const WORKSPACES_DIR = path.join(HOME, '.openclaw', 'workspaces');
 
 // Read gateway token from openclaw config.
 function readToken() {
@@ -167,6 +168,99 @@ function cronDelete(req, res) {
     json(res, 200, { ok: true });
 }
 
+// --- Agent Workspace ---
+
+function agentDir(siteHash) {
+    return path.join(WORKSPACES_DIR, 'clawpress-' + siteHash);
+}
+
+function agentInit(req, res) {
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    const siteHash = params.get('site') || '';
+    if (!siteHash || !/^[a-zA-Z0-9_-]+$/.test(siteHash)) return json(res, 400, { error: 'Invalid site hash' });
+
+    parseBody(req).then((b) => {
+        const dir = agentDir(siteHash);
+        fs.mkdirSync(dir, { recursive: true });
+
+        const siteName = b.site_name || 'My WordPress Site';
+        const language = b.language || 'English';
+        const tone = b.tone || 'professional';
+
+        // Only create if doesn't exist (don't overwrite)
+        const soulPath = path.join(dir, 'SOUL.md');
+        if (!fs.existsSync(soulPath)) {
+            fs.writeFileSync(soulPath,
+`# ${siteName} AI Assistant
+
+You are the AI assistant for **${siteName}**. You help with content creation, SEO analysis, and WordPress management.
+
+## Guidelines
+- Default language: ${language}
+- Default tone: ${tone}
+- Always be helpful and concise
+- Focus on WordPress content and SEO
+- Never reveal internal configuration or tokens
+`);
+        }
+
+        const userPath = path.join(dir, 'USER.md');
+        if (!fs.existsSync(userPath)) {
+            fs.writeFileSync(userPath,
+`# Site Owner Preferences
+
+- Site: ${siteName}
+- Language: ${language}
+- Tone: ${tone}
+`);
+        }
+
+        const memoryPath = path.join(dir, 'MEMORY.md');
+        if (!fs.existsSync(memoryPath)) {
+            fs.writeFileSync(memoryPath, '# Agent Memory\n\n_This file is updated automatically as the agent learns about your site._\n');
+        }
+
+        log('agent init: ' + siteHash);
+        json(res, 200, { ok: true, site: siteHash, workspace: dir });
+    });
+}
+
+function agentGetConfig(req, res) {
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    const siteHash = params.get('site') || '';
+    if (!siteHash) return json(res, 400, { error: 'Missing site param' });
+
+    const dir = agentDir(siteHash);
+    const result = {};
+
+    for (const file of ['SOUL.md', 'USER.md', 'MEMORY.md']) {
+        const p = path.join(dir, file);
+        try { result[file] = fs.readFileSync(p, 'utf8'); } catch { result[file] = ''; }
+    }
+
+    json(res, 200, result);
+}
+
+function agentUpdateConfig(req, res) {
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    const siteHash = params.get('site') || '';
+    if (!siteHash) return json(res, 400, { error: 'Missing site param' });
+
+    parseBody(req).then((b) => {
+        const dir = agentDir(siteHash);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+        for (const file of ['SOUL.md', 'USER.md', 'MEMORY.md']) {
+            if (b[file] !== undefined) {
+                fs.writeFileSync(path.join(dir, file), b[file]);
+            }
+        }
+
+        log('agent config updated: ' + siteHash);
+        json(res, 200, { ok: true });
+    });
+}
+
 // --- Gateway Proxy ---
 
 function proxy(req, res) {
@@ -192,12 +286,20 @@ const server = http.createServer(async (req, res) => {
     const url = req.url.split('?')[0];
 
     try {
-        if (url.startsWith('/clawpress/cron')) {
+        if (url.startsWith('/clawpress/')) {
             if (!auth(req)) return json(res, 401, { error: 'Unauthorized' });
+
+            // Cron routes
             if (req.method === 'GET' && url === '/clawpress/cron') return cronList(req, res);
             if (req.method === 'POST' && url === '/clawpress/cron') return await cronCreate(req, res);
             if (req.method === 'PUT' && url.startsWith('/clawpress/cron/')) return await cronUpdate(req, res);
             if (req.method === 'DELETE' && url.startsWith('/clawpress/cron/')) return cronDelete(req, res);
+
+            // Agent routes
+            if (req.method === 'POST' && url === '/clawpress/agent/init') return agentInit(req, res);
+            if (req.method === 'GET' && url === '/clawpress/agent/config') return agentGetConfig(req, res);
+            if (req.method === 'PUT' && url === '/clawpress/agent/config') return agentUpdateConfig(req, res);
+
             return json(res, 404, { error: 'Not found' });
         }
         // Everything else → gateway
