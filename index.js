@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const net = require('net');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 
 const PORT = parseInt(process.env.BRIDGE_PORT || '18790', 10);
 const GW_HOST = process.env.GATEWAY_HOST || '127.0.0.1';
@@ -75,6 +76,8 @@ function writeCronFile(jobs) {
         try { fs.copyFileSync(CRON_FILE, CRON_FILE + '.bak'); } catch {}
     }
     fs.writeFileSync(CRON_FILE, JSON.stringify({ version: 1, jobs }, null, 2));
+    // Signal gateway to reload cron from disk
+    try { execSync("kill -HUP $(ps aux | grep openclaw-gateway | grep -v grep | awk '{print $2}') 2>/dev/null"); } catch {}
 }
 
 function cronList(req, res) {
